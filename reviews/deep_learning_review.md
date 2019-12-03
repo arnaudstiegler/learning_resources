@@ -1,9 +1,10 @@
 # Deep Learning Review
 
-
-TODO: initializations
+The main point of this markdown (and the reason for the format) is to provide "oral" explanations for different aspects of deep learning. Most of the time, a schema is worth a 10-minute explanation,  but you can't draw schema on the phone. So you have to get used to explaining things with words rather than formulas and schemas.
 
 TODO: optimizers
+
+TODO: Overflow, underflow, and activations
 
 TODO: RNNs (talk about the gates, and the different activations depending on the role)
 
@@ -14,7 +15,34 @@ Some of the key elements of convolutional layers:
   - Number of parameters: convolutional layers have a very small amount of parameters compared to dense layers, so you can stack convolutional layers while still having a small amount of parameters
   - Different levels of abstraction: by stacking those layers, you get access to different level of abstraction. The first layers will detect basic features such as shapes and textures. Then the deeper you go into the stack, the more abstract the things you can detect will be. So that intermediary layers might detect parts of objects/persons (like an eye, a handle etc...) while the last layers will be able to detect whole objects. *An example of that is style transfer: you compute your loss by combining the style of a picture (ie. the first layers) with the content of another picture (i.e the deeper layers)*
   
-  
+# RNN layers
+
+Main idea behind the introduction of RNNs: the input might have a sequential nature (meaning that input[t] depends on some previous parts of the input). Dense layers can't handle that, and convolutional layers can also model short relationship in a fixed window. What Rnn can do is that they can model long-term relationships between parts of the input (for instance, the relationship between the current word and the previous words).
+
+###### How it works:
+
+An Rnn layer is basically a for loop: for each part of the input, you do a forward pass in the layer, generate an internal state (which is what conveys information between iterations) and generate an output for the current iteration. Note that the weights are shared for timesteps (you always use the same weight matrix, and you update the same matrix for all the iterations).
+
+###### Problems:
+Rnn suffer from vanishing/exploding gradients: for vanishing gradients, the long-term relationship are never actually learned because the gradient for long-term relationship (the gradients that come from deep elements in the input) are too small. This is why RNN are actually failing.
+
+The exploding gradient issue can be fixed by manually clipping the gradient: if the gradient is above a threshold, clip it at the threshold. However, vanishing gradients cannot be fixed that way.
+
+###### LSTM:
+Its architecture solve the vanishing gradient issue by adding a cell state to the mix.
+
+Rundown of the transformation:
+- New input is first combined with previous internal state through sigmoid(mat_mul) to compute the __forget_gate__ and the __input_gate__ which define what is kept from the previous cell state and what is added from the tilde cell state
+- tilde state cell is computed through combined internal state and input using tanh
+- new state cell is old_state_cell\*forget_gate + tilde_state_cell\*input_gate
+- new internal state is output_gate\*Cell_state where output_gate is tanh(matmul()) using previous internal state and input
+
+As a general rule, tanh activation are used when outputing a matrix (like cell state or internal state), sigmoid when outputing a gate.
+
+Structurally, the cell state is what helps the gradient flowing back: the only transformations it goes through are linear (no activations). It is somewhat similar to what residual connections do for convolutional nets.
+
+GRU are a more recent alternatives to RNN: one gate less than LSTM, faster (less parameters) but usually worse in terms of performance.
+
 # Dropout
 
 Regularization layer to prevent overfitting.It works by randomly dropping activations from the previous layer during training (the proportion of activations dropped is a parameter of the layer). During inference, the dropout layers are ignored.
