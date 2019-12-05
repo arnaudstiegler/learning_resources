@@ -111,3 +111,33 @@ For the Xavier initialization, this results in having all the weights sampled fr
 
 The choice of the variance is made so that each layer has the same variance even though there are inter-connections between those layers. With some calculus, it can be shown that the variance of the output is the product of the variances of each layer weighted by the number of units for each layer. As a result, we can show that the variance of the output is equal to the variance of the input for the Xavier initialization (i.e no exploding/vanishing gradients).
 
+
+# Optimizers
+
+#### Challenges with optimizers
+
+- The learning rate value is very important: if it is too high, the loss will oscillate but never converge. On the contrary, if it is too low, the convergence will be very slow
+- Learning rate schedules can be used to reduce the learning rate at pre-defined timesteps or a threshold on the loss, but those values need to be chosen for each distinct dataset
+
+#### Momentum
+
+The idea behind momentum is to avoid having the loss oscilate while descending (think of a ravine, where you would oscilate from one side to the other, but still going deeper at every time step). Think of momentum as rolling a ball down a ravine. 
+
+Momentum is done by adding to the current update a part of the previous update (usually around 0.9) which ensures that the new update will still keep some of the directions of the previous one. 
+Momentum has two distinct effects:
+- reduces the oscillation during the descent
+- speeds up convergence (if two updates are in the same direction, then the addition will increase the update value)
+
+#### Nesterov accelerated gradient
+
+Momentum is unsatisfactory because it blindly follows a direction without anticipating where the update will leave the ball. NAG tries to correct that by changing the way we compute the gradient. What NAG does is take a big jump in the direction of the previous update, calculate the gradient at this position to compute a small correction, and add the correction to the big jump. It is better because the gradient is computed at a more precise location than for momentum.
+
+#### AdaGrad
+
+Another issue not covered by the two previous techniques is that some features are less frequent than others, and the parameters associated with those rare features will not be often updated. Adagrad basically ensure that the learning rate is higher for unfrequent-feature parameters than frequent ones. The bigger the updates a parameter have, the smaller the learning rate gets (there's the past squared gradients in the denominator).
+
+A limitation with Adagrad is that the learning rates will become increasingly smaller: at some point, the updates will be infinitesimally small and the neural net will stop learning.
+
+#### Adam
+
+Currently one of the most used optimizer. Similarly to Adagrad, it computes learning rate wrt. each parameter, and combine past squared gradient (like RMSprop) and past gradients (like momentum) to compute updates.
