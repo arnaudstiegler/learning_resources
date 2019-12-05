@@ -2,11 +2,7 @@
 
 The main point of this markdown (and the reason for the format) is to provide "oral" explanations for different aspects of deep learning. Most of the time, a schema is worth a 10-minute explanation,  but you can't draw schema on the phone. So you have to get used to explaining things with words rather than formulas and schemas.
 
-TODO: optimizers
-
 TODO: Overflow, underflow, and activations
-
-TODO: RNNs (talk about the gates, and the different activations depending on the role)
 
 # Convolutional Layers
 
