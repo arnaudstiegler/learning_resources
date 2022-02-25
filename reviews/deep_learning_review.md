@@ -137,3 +137,11 @@ A limitation with Adagrad is that the learning rates will become increasingly sm
 #### Adam
 
 Currently one of the most used optimizer. Similarly to Adagrad, it computes learning rate wrt. each parameter, and combine past squared gradient (like RMSprop) and past gradients (like momentum) to compute updates.
+
+# Gradient Checkpointing
+
+Gradient checkpoint is a way to reduce the memory complexity of a model during training, by optimizing the way the memory is used to store intermediate results (for the backpropagation). This memory optimization comes at the price of a slightly slower model training (higher compute time).
+There are 3 main ideas based on the computational graph:
+- In-place operations (like an activation layer), we can just store the output values but not the input values
+- Shared memory space: if an intermediate result is not used anymore, we can drop that result and use its memory location for another item
+- Recomputing on the fly the intermediate results coming from low-cost operations so that you don't have to store them
