@@ -145,3 +145,5 @@ There are 3 main ideas based on the computational graph:
 - In-place operations (like an activation layer), we can just store the output values but not the input values
 - Shared memory space: if an intermediate result is not used anymore, we can drop that result and use its memory location for another item
 - Recomputing on the fly the intermediate results coming from low-cost operations so that you don't have to store them
+
+See: https://arxiv.org/pdf/1604.06174.pdf
