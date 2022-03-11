@@ -14,6 +14,7 @@ Bert can't handle semantic similarity tasks or clustering texts because it would
 # DeepNet: Scaling Transformers to 1,000 layers
 
 Very large Transformer-based model are still relatively shallow as adding more layers lead to instability. The paper shows that it's a combination of having very large model updates at early stage (proportional to the number of layers), followed by vanishing gradients which prevents the model from exiting the suboptimal local minima.
+
 To remedy that, the paper shows that we can theoretically bound the norm of the model updates for every layer with a constant, using:
 - the correct initialization for the different weights
 - scaling the residual connection inside the LayerNorm with a scaling factor alpha
