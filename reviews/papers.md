@@ -17,4 +17,5 @@ Very large Transformer-based model are still relatively shallow as adding more l
 To remedy that, the paper shows that we can theoretically bound the norm of the model updates for every layer with a constant, using:
 - the correct initialization for the different weights
 - scaling the residual connection inside the LayerNorm with a scaling factor alpha
+
 With those updates, the model updates remain bounded throughout all layers of the model, avoiding instabilities mentioned before.
