@@ -138,7 +138,7 @@ A limitation with Adagrad is that the learning rates will become increasingly sm
 
 Currently one of the most used optimizer. Similarly to Adagrad, it computes learning rate wrt. each parameter, and combine past squared gradient (like RMSprop) and past gradients (like momentum) to compute updates.
 
-# Gradient Checkpointing
+#### Gradient Checkpointing
 
 Gradient checkpoint is a way to reduce the memory complexity of a model during training, by optimizing the way the memory is used to store intermediate results (for the backpropagation). This memory optimization comes at the price of a slightly slower model training (higher compute time).
 There are 3 main ideas based on the computational graph:
@@ -147,3 +147,7 @@ There are 3 main ideas based on the computational graph:
 - Recomputing on the fly the intermediate results coming from low-cost operations so that you don't have to store them
 
 See: https://arxiv.org/pdf/1604.06174.pdf
+
+#### Bi-Encoders vs Cross-Encoders
+Cross-Encoders are regular pre-trained language models (such as BERT) that will take 2 sentences (with a \[SEP\] token) and will leverage its attention heads to model cross-sentences interactions. Any PLM can be used as a cross-encoder OOTB, but modeling pairwise interactions is very costly because you have to run one inference path per sentence pair.
+Bi-Encoders are also based on PLMs but use them differently: each sentence is passed independently to the model which will produce meaningful sentence embeddings. Since PLMs are not natively providing meaningful sentence embeddings, Bi-Encoders need to be fine-tuned on sentence similarity tasks. Bi-Encoders usually perform worse than Cross-Encoders, but they are substantially more efficient since you only need to do one inference pass for each sentence (i.e you don't need to do that for each sentence pair)
