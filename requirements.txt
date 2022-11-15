@@ -5,3 +5,4 @@ click
 transformers
 pyarrow
 fastparquet
+ipdb

@@ -10,6 +10,7 @@ from transformers import ViTFeatureExtractor, RobertaTokenizer
 from transformers import ViTModel, RobertaModel
 
 from clip_training.datagen import get_filtered_df_for_training
+from transformers.training_args import TrainingArguments
 
 
 class ClipDataset(Dataset):
@@ -79,14 +80,17 @@ class ClipModel(nn.Module):
 
 class CustomTrainer(Trainer):
     @staticmethod
-    def get_label(inputs):
-        return torch.arange(inputs['text']['input_ids'].shape[0])
+    def get_label(inputs, n_device):
+        return torch.concat([torch.arange(inputs['text']['input_ids'].shape[0]) for _ in range(n_device)])
 
     def compute_loss(self, model, inputs, return_outputs=False):
         outputs = model(text=inputs['text'], image=inputs['image'])
+        # If using data parallel, the effective batch size is different
+        n_device = outputs.view(-1, self.args.per_device_train_batch_size, self.args.per_device_train_batch_size).shape[0]
 
-        # # forward pass
-        labels = self.get_label(inputs)
+        device = outputs.device
+
+        labels = self.get_label(inputs, n_device).to(device)
 
         loss_t = nn.functional.cross_entropy(outputs, labels)
         loss_i = nn.functional.cross_entropy(outputs.T, labels)
@@ -103,7 +107,14 @@ def run_training(filepath: str, images_path: str) -> None:
     train_dataset = ClipDataset(df, images_path)
 
     model = ClipModel()
-    trainer = CustomTrainer(model=model, train_dataset=train_dataset, data_collator=collate)
+
+    training_args = TrainingArguments(
+        output_dir='tmp_trainer',
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=1
+    )
+
+    trainer = CustomTrainer(model=model, train_dataset=train_dataset, data_collator=collate, args=training_args)
 
     trainer.train()
 

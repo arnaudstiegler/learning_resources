@@ -79,8 +79,8 @@ def get_filtered_df_for_training(filepath: str, images_path: str) -> pd.DataFram
 
 
 @click.command()
-@click.argument('filepath')
-@click.argument('dest')
+@click.option('--filepath')
+@click.option('--dest')
 def main(filepath: str, dest: str) -> None:
     data_df = read_parquet_data(filepath)
     download_data_locally(data_df, dest)
