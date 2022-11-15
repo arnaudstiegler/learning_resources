@@ -2,6 +2,7 @@ import os
 import signal
 import urllib
 from contextlib import contextmanager
+
 import click
 import pandas as pd
 from torchvision.io import read_image
@@ -57,6 +58,23 @@ def download_data_locally(df: pd.DataFrame, dest: str) -> None:
 def read_parquet_data(local_path: str) -> pd.DataFrame:
     df = pd.read_parquet(local_path)
     df = df.loc[df['NSFW'] == 'UNLIKELY']
+    return df
+
+
+def get_filtered_df_for_training(filepath: str, images_path: str) -> pd.DataFrame:
+    df = read_parquet_data(filepath)
+    df = df.reset_index()
+    df = df.rename(columns={"index": "image_index"})
+
+    # Filter with the image present in the images folder
+    images = [int(elem.replace('.jpg', '')) for elem in os.listdir(images_path) if
+              elem != '.ipynb_checkpoints']
+    df['has_image'] = df['image_index'].isin(images)
+
+    # Final filter
+    df = df.loc[df.has_image]
+    df = df.reset_index(drop=True)
+
     return df
 
 
