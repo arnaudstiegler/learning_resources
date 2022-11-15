@@ -8,17 +8,17 @@ from torchvision.io import read_image
 from transformers import ViTFeatureExtractor
 
 
-def validate_image(feature_extractor: ViTFeatureExtractor) -> None:
+def validate_image(feature_extractor: ViTFeatureExtractor, dest: str) -> None:
     # sanity check on downloaded images
-    for file in os.listdir('images'):
+    for file in os.listdir(dest):
         if file.endswith('.jpg'):
             try:
-                image = read_image(f'images/{file}')
+                image = read_image(os.path.join(dest, file))
                 _ = feature_extractor(image)
             except Exception as e:
                 print(e)
                 print(f'Deleting: images/{file}')
-                os.remove(f'images/{file}')
+                os.remove(os.path.join(dest, f'{file}'))
 
 
 class TimeoutException(Exception): pass
@@ -37,13 +37,13 @@ def time_limit(seconds):
         signal.alarm(0)
 
 
-def download_data_locally(df: pd.DataFrame) -> None:
+def download_data_locally(df: pd.DataFrame, dest: str) -> None:
     feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
     for i, row in df.iterrows():
-        if not os.path.exists(f"images/{i}.jpg"):
+        if not os.path.exists(os.path.join(dest, f"{i}.jpg")):
             try:
                 with time_limit(10):
-                    urllib.request.urlretrieve(row['URL'], f"images/{i}.jpg")
+                    urllib.request.urlretrieve(row['URL'], os.path.join(dest, f"{i}.jpg"))
             except TimeoutException:
                 print("Timed out!")
             except KeyboardInterrupt:
@@ -51,7 +51,7 @@ def download_data_locally(df: pd.DataFrame) -> None:
             except Exception as e:
                 print(f'{row["URL"]} failed with exception={e}')
 
-        validate_image(feature_extractor)
+        validate_image(feature_extractor, dest)
 
 
 def read_parquet_data(local_path: str) -> pd.DataFrame:
@@ -62,9 +62,10 @@ def read_parquet_data(local_path: str) -> pd.DataFrame:
 
 @click.command()
 @click.argument('filepath')
-def main(filepath: str) -> None:
+@click.argument('dest')
+def main(filepath: str, dest: str) -> None:
     data_df = read_parquet_data(filepath)
-    download_data_locally(data_df)
+    download_data_locally(data_df, dest)
 
 
 if __name__ == '__main__':
