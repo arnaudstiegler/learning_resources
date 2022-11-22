@@ -6,3 +6,5 @@ transformers
 pyarrow
 fastparquet
 ipdb
+tensorboard
+scikit-learn

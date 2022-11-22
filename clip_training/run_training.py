@@ -1,16 +1,19 @@
 import os
+from typing import Dict
 
 import click
+import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 from torchvision.io import read_image
 from transformers import Trainer
 from transformers import ViTFeatureExtractor, RobertaTokenizer
 from transformers import ViTModel, RobertaModel
-
-from clip_training.datagen import get_filtered_df_for_training
 from transformers.training_args import TrainingArguments
+from transformers.trainer_utils import EvalPrediction
+from clip_training.datagen import get_filtered_df_for_training
 
 
 class ClipDataset(Dataset):
@@ -78,25 +81,34 @@ class ClipModel(nn.Module):
         return logits
 
 
-class CustomTrainer(Trainer):
-    @staticmethod
-    def get_label(inputs, n_device):
-        return torch.concat([torch.arange(inputs['text']['input_ids'].shape[0]) for _ in range(n_device)])
+def get_label(outputs, n_device):
+    return torch.stack([torch.arange(outputs.shape[-1]) for _ in range(n_device)])
 
+
+class CustomTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
         outputs = model(text=inputs['text'], image=inputs['image'])
         # If using data parallel, the effective batch size is different
-        n_device = outputs.view(-1, self.args.per_device_train_batch_size, self.args.per_device_train_batch_size).shape[0]
-
+        n_device = torch.cuda.device_count() if outputs.device.type == 'cuda' else 1
         device = outputs.device
 
-        labels = self.get_label(inputs, n_device).to(device)
+        labels = get_label(outputs, n_device).to(device)
+        batched_outputs = outputs.view(n_device, outputs.shape[-1], outputs.shape[-1])
 
-        loss_t = nn.functional.cross_entropy(outputs, labels)
-        loss_i = nn.functional.cross_entropy(outputs.T, labels)
+        loss_t = nn.functional.cross_entropy(batched_outputs, labels)
+        loss_i = nn.functional.cross_entropy(batched_outputs.permute(0, 2, 1), labels)
         loss = (loss_i + loss_t) / 2
 
         return (loss, outputs) if return_outputs else loss
+
+
+def compute_metrics(
+        predictions: EvalPrediction
+) -> Dict[str, float]:
+    batch_size = predictions.predictions.shape[-1]
+    predicted_ids = np.argmax(predictions.predictions)
+    labels = get_label(predictions.predictions, batch_size)
+    raise NotImplementedError
 
 
 @click.command()
@@ -104,17 +116,31 @@ class CustomTrainer(Trainer):
 @click.option('--images_path')
 def run_training(filepath: str, images_path: str) -> None:
     df = get_filtered_df_for_training(filepath, images_path)
-    train_dataset = ClipDataset(df, images_path)
+    train, test = train_test_split(df, test_size=0.2, random_state=0)
+
+    train_dataset = ClipDataset(train.reset_index(drop=True), images_path)
+    test_dataset = ClipDataset(test.reset_index(drop=True), images_path)
 
     model = ClipModel()
 
     training_args = TrainingArguments(
         output_dir='tmp_trainer',
         per_device_train_batch_size=8,
-        gradient_accumulation_steps=1
+        fp16=True,
+        logging_strategy='steps',
+        max_steps=1000,
+        logging_steps=100,
+        eval_steps=100,
+        evaluation_strategy='steps',
+        dataloader_drop_last=True,
+        include_inputs_for_metrics=True,
+        # TODO: add warmup steps
+        # TODO: use Adafactor
+        # gradient_checkpointing=True  # TODO: Add it back to the ClipModel before enabling it here
     )
 
-    trainer = CustomTrainer(model=model, train_dataset=train_dataset, data_collator=collate, args=training_args)
+    trainer = CustomTrainer(model=model, train_dataset=train_dataset, eval_dataset=test_dataset, data_collator=collate,
+                            args=training_args, compute_metrics=compute_metrics)
 
     trainer.train()
 
