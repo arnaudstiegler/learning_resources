@@ -14,6 +14,14 @@ from transformers import ViTModel, RobertaModel
 from transformers.training_args import TrainingArguments
 from transformers.trainer_utils import EvalPrediction
 from clip_training.datagen import get_filtered_df_for_training
+from dataclasses import dataclass, asdict
+
+
+@dataclass
+class ClipSample:
+    input_ids: torch.tensor
+    attention_mask: torch.tensor
+    pixel_values: torch.tensor
 
 
 class ClipDataset(Dataset):
@@ -38,7 +46,7 @@ class ClipDataset(Dataset):
                 'text': self.tokenizer(text, return_tensors='pt')}
 
 
-def collate(inputs):
+def collate(inputs) -> Dict:
     max_length = max([elem['text']['input_ids'].shape[-1] for elem in inputs])
     input_ids = torch.concat([torch.nn.functional.pad(elem['text']['input_ids'],
                                                       (0,
@@ -51,8 +59,7 @@ def collate(inputs):
                                                   value=0) for elem in inputs])
     image = torch.stack([elem['image']['pixel_values'][0] for elem in inputs])
 
-    return {'image': {'pixel_values': image},
-            'text': {'input_ids': input_ids, 'attention_mask': masks}}
+    return asdict(ClipSample(pixel_values=image, input_ids=input_ids, attention_mask=masks))
 
 
 class ClipModel(nn.Module):
@@ -67,12 +74,12 @@ class ClipModel(nn.Module):
 
         self.temperature = torch.nn.Parameter(torch.tensor([0.07]))  # Provided by the paper
 
-    def forward(self, text, image):
-        outputs = self.image_encoder(**image)
+    def forward(self, text, attention_mask, image):
+        outputs = self.image_encoder(image)
         image_embedding = outputs.last_hidden_state[:, 0]
         image_embedding = nn.functional.normalize(self.image_proj(image_embedding), p=2, dim=-1)
 
-        outputs = self.text_encoder(**text)
+        outputs = self.text_encoder(text, attention_mask=attention_mask)
         text_embedding = outputs.last_hidden_state[:, 0]
         text_embedding = nn.functional.normalize(self.text_proj(text_embedding), p=2, dim=-1)
 
@@ -87,7 +94,8 @@ def get_label(outputs, n_device):
 
 class CustomTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
-        outputs = model(text=inputs['text'], image=inputs['image'])
+        outputs = model(text=inputs['input_ids'], attention_mask=inputs['attention_mask'],
+                        image=inputs['pixel_values'])
         # If using data parallel, the effective batch size is different
         n_device = torch.cuda.device_count() if outputs.device.type == 'cuda' else 1
         device = outputs.device
@@ -108,6 +116,9 @@ def compute_metrics(
     batch_size = predictions.predictions.shape[-1]
     predicted_ids = np.argmax(predictions.predictions)
     labels = get_label(predictions.predictions, batch_size)
+
+    import ipdb; ipdb.set_trace()
+
     raise NotImplementedError
 
 
@@ -116,7 +127,7 @@ def compute_metrics(
 @click.option('--images_path')
 def run_training(filepath: str, images_path: str) -> None:
     df = get_filtered_df_for_training(filepath, images_path)
-    train, test = train_test_split(df, test_size=0.2, random_state=0)
+    train, test = train_test_split(df, test_size=0.05, random_state=0)
 
     train_dataset = ClipDataset(train.reset_index(drop=True), images_path)
     test_dataset = ClipDataset(test.reset_index(drop=True), images_path)
@@ -125,13 +136,14 @@ def run_training(filepath: str, images_path: str) -> None:
 
     training_args = TrainingArguments(
         output_dir='tmp_trainer',
-        per_device_train_batch_size=8,
-        fp16=True,
+        per_device_train_batch_size=2,
+        fp16=False,
         logging_strategy='steps',
         max_steps=1000,
         logging_steps=100,
-        eval_steps=100,
+        eval_steps=1,
         evaluation_strategy='steps',
+        per_device_eval_batch_size=3,
         dataloader_drop_last=True,
         include_inputs_for_metrics=True,
         # TODO: add warmup steps
@@ -139,10 +151,13 @@ def run_training(filepath: str, images_path: str) -> None:
         # gradient_checkpointing=True  # TODO: Add it back to the ClipModel before enabling it here
     )
 
-    trainer = CustomTrainer(model=model, train_dataset=train_dataset, eval_dataset=test_dataset, data_collator=collate,
+    trainer = CustomTrainer(model=model, train_dataset=train_dataset, eval_dataset=test_dataset,
+                            data_collator=collate,
                             args=training_args, compute_metrics=compute_metrics)
 
     trainer.train()
+
+    # trainer.evaluate(eval_dataset=test_dataset)
 
 
 if __name__ == '__main__':
