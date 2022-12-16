@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 from typing import Dict
 
 import click
@@ -8,13 +9,13 @@ import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 from torchvision.io import read_image
-from transformers import Trainer
+from transformers import Trainer, IntervalStrategy
 from transformers import ViTFeatureExtractor, RobertaTokenizer
 from transformers import ViTModel, RobertaModel
-from transformers.training_args import TrainingArguments
 from transformers.trainer_utils import EvalPrediction
+from transformers.training_args import TrainingArguments
+
 from clip_training.datagen import get_filtered_df_for_training
-from dataclasses import dataclass, asdict
 
 
 @dataclass
@@ -45,9 +46,13 @@ class ClipDataset(Dataset):
 
         tokenized_text = self.tokenizer(text, return_tensors='pt')
 
-        return {'pixel_values': self.feature_extractor(image, return_tensors='pt')['pixel_values'],
-                'input_ids': tokenized_text['input_ids'],
-                'attention_mask': tokenized_text['attention_mask']}
+        return {
+            'pixel_values': self.feature_extractor(image, return_tensors='pt')['pixel_values'],
+            'input_ids': tokenized_text['input_ids'],
+            'attention_mask': tokenized_text['attention_mask'],
+            # Allows compute_metrics to work on the trainer side without static labels
+            'return_loss': True
+        }
 
 
 def collate(inputs) -> Dict:
@@ -64,7 +69,7 @@ def collate(inputs) -> Dict:
     image = torch.stack([elem['pixel_values'][0] for elem in inputs])
 
     return {'input_ids': input_ids, 'attention_mask': masks,
-            'pixel_values': image}
+            'pixel_values': image, 'return_loss': True}
 
 
 class ClipModel(nn.Module):
@@ -79,7 +84,7 @@ class ClipModel(nn.Module):
 
         self.temperature = torch.nn.Parameter(torch.tensor([0.07]))  # Provided by the paper
 
-    def forward(self, input_ids, attention_mask, pixel_values):
+    def forward(self, input_ids, attention_mask, pixel_values, return_loss=True):
         outputs = self.image_encoder(pixel_values)
         image_embedding = outputs.last_hidden_state[:, 0]
         image_embedding = nn.functional.normalize(self.image_proj(image_embedding), p=2, dim=-1)
@@ -118,6 +123,9 @@ class CustomTrainer(Trainer):
 def compute_metrics(
         predictions: EvalPrediction
 ) -> Dict[str, float]:
+
+    import ipdb; ipdb.set_trace()
+
     batch_size = predictions.predictions.shape[-1]
     predicted_ids = np.argmax(predictions.predictions)
     labels = get_label(predictions.predictions, batch_size)
@@ -145,7 +153,7 @@ def run_training(filepath: str, images_path: str) -> None:
         max_steps=1000,
         logging_steps=100,
         eval_steps=1,
-        evaluation_strategy='steps',
+        evaluation_strategy=IntervalStrategy.STEPS,
         per_device_eval_batch_size=3,
         dataloader_drop_last=True,
         include_inputs_for_metrics=True,
@@ -158,9 +166,9 @@ def run_training(filepath: str, images_path: str) -> None:
                             data_collator=collate,
                             args=training_args, compute_metrics=compute_metrics)
 
-    # trainer.train()
+    trainer.train()
 
-    trainer.evaluate(eval_dataset=test_dataset)
+    # trainer.evaluate(eval_dataset=test_dataset)
 
 
 if __name__ == '__main__':
