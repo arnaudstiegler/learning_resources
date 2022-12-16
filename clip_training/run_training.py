@@ -51,8 +51,7 @@ class ClipDataset(Dataset):
 
 
 def collate(inputs) -> Dict:
-    try:
-        max_length = max([elem['input_ids'].shape[-1] for elem in inputs])
+    max_length = max([elem['input_ids'].shape[-1] for elem in inputs])
     input_ids = torch.concat([torch.nn.functional.pad(elem['input_ids'],
                                                       (0,
                                                        max_length - elem['input_ids'].shape[
@@ -161,7 +160,7 @@ def run_training(filepath: str, images_path: str) -> None:
 
     # trainer.train()
 
-    # trainer.evaluate(eval_dataset=test_dataset)
+    trainer.evaluate(eval_dataset=test_dataset)
 
 
 if __name__ == '__main__':
