@@ -42,24 +42,30 @@ class ClipDataset(Dataset):
         text = self.data_df.loc[idx, 'TEXT']
         if self.transform:
             image = self.transform(image)
-        return {'image': self.feature_extractor(image, return_tensors='pt'),
-                'text': self.tokenizer(text, return_tensors='pt')}
+
+        tokenized_text = self.tokenizer(text, return_tensors='pt')
+
+        return {'pixel_values': self.feature_extractor(image, return_tensors='pt')['pixel_values'],
+                'input_ids': tokenized_text['input_ids'],
+                'attention_mask': tokenized_text['attention_mask']}
 
 
 def collate(inputs) -> Dict:
-    max_length = max([elem['text']['input_ids'].shape[-1] for elem in inputs])
-    input_ids = torch.concat([torch.nn.functional.pad(elem['text']['input_ids'],
+    try:
+        max_length = max([elem['input_ids'].shape[-1] for elem in inputs])
+    input_ids = torch.concat([torch.nn.functional.pad(elem['input_ids'],
                                                       (0,
-                                                       max_length - elem['text']['input_ids'].shape[
+                                                       max_length - elem['input_ids'].shape[
                                                            -1]),
                                                       value=1) for elem in inputs])
-    masks = torch.concat([torch.nn.functional.pad(elem['text']['attention_mask'],
+    masks = torch.concat([torch.nn.functional.pad(elem['attention_mask'],
                                                   (0, max_length -
-                                                   elem['text']['attention_mask'].shape[-1]),
+                                                   elem['attention_mask'].shape[-1]),
                                                   value=0) for elem in inputs])
-    image = torch.stack([elem['image']['pixel_values'][0] for elem in inputs])
+    image = torch.stack([elem['pixel_values'][0] for elem in inputs])
 
-    return asdict(ClipSample(pixel_values=image, input_ids=input_ids, attention_mask=masks))
+    return {'input_ids': input_ids, 'attention_mask': masks,
+            'pixel_values': image}
 
 
 class ClipModel(nn.Module):
@@ -74,12 +80,12 @@ class ClipModel(nn.Module):
 
         self.temperature = torch.nn.Parameter(torch.tensor([0.07]))  # Provided by the paper
 
-    def forward(self, text, attention_mask, image):
-        outputs = self.image_encoder(image)
+    def forward(self, input_ids, attention_mask, pixel_values):
+        outputs = self.image_encoder(pixel_values)
         image_embedding = outputs.last_hidden_state[:, 0]
         image_embedding = nn.functional.normalize(self.image_proj(image_embedding), p=2, dim=-1)
 
-        outputs = self.text_encoder(text, attention_mask=attention_mask)
+        outputs = self.text_encoder(input_ids, attention_mask=attention_mask)
         text_embedding = outputs.last_hidden_state[:, 0]
         text_embedding = nn.functional.normalize(self.text_proj(text_embedding), p=2, dim=-1)
 
@@ -94,8 +100,8 @@ def get_label(outputs, n_device):
 
 class CustomTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
-        outputs = model(text=inputs['input_ids'], attention_mask=inputs['attention_mask'],
-                        image=inputs['pixel_values'])
+        outputs = model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
+                        pixel_values=inputs['pixel_values'])
         # If using data parallel, the effective batch size is different
         n_device = torch.cuda.device_count() if outputs.device.type == 'cuda' else 1
         device = outputs.device
@@ -107,7 +113,7 @@ class CustomTrainer(Trainer):
         loss_i = nn.functional.cross_entropy(batched_outputs.permute(0, 2, 1), labels)
         loss = (loss_i + loss_t) / 2
 
-        return (loss, outputs) if return_outputs else loss
+        return (loss, batched_outputs) if return_outputs else loss
 
 
 def compute_metrics(
@@ -116,8 +122,6 @@ def compute_metrics(
     batch_size = predictions.predictions.shape[-1]
     predicted_ids = np.argmax(predictions.predictions)
     labels = get_label(predictions.predictions, batch_size)
-
-    import ipdb; ipdb.set_trace()
 
     raise NotImplementedError
 
@@ -155,7 +159,7 @@ def run_training(filepath: str, images_path: str) -> None:
                             data_collator=collate,
                             args=training_args, compute_metrics=compute_metrics)
 
-    trainer.train()
+    # trainer.train()
 
     # trainer.evaluate(eval_dataset=test_dataset)
 
