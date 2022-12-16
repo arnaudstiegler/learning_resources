@@ -117,15 +117,12 @@ class CustomTrainer(Trainer):
         loss_i = nn.functional.cross_entropy(batched_outputs.permute(0, 2, 1), labels)
         loss = (loss_i + loss_t) / 2
 
-        return (loss, batched_outputs) if return_outputs else loss
+        return (loss, outputs) if return_outputs else loss
 
 
 def compute_metrics(
         predictions: EvalPrediction
 ) -> Dict[str, float]:
-
-    import ipdb; ipdb.set_trace()
-
     batch_size = predictions.predictions.shape[-1]
     predicted_ids = np.argmax(predictions.predictions)
     labels = get_label(predictions.predictions, batch_size)
