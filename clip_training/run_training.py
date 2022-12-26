@@ -117,17 +117,25 @@ class CustomTrainer(Trainer):
         loss_i = nn.functional.cross_entropy(batched_outputs.permute(0, 2, 1), labels)
         loss = (loss_i + loss_t) / 2
 
-        return (loss, outputs) if return_outputs else loss
+        return (loss, {'pred': outputs}) if return_outputs else loss
 
 
 def compute_metrics(
         predictions: EvalPrediction
 ) -> Dict[str, float]:
     batch_size = predictions.predictions.shape[-1]
-    predicted_ids = np.argmax(predictions.predictions)
-    labels = get_label(predictions.predictions, batch_size)
+    num_samples = predictions.predictions.shape[0]
 
-    raise NotImplementedError
+    logits = predictions.predictions.reshape(-1, batch_size)
+    encoded_preds = np.argmax(logits, axis=-1)
+
+    labels = np.tile(np.arange(batch_size), reps=num_samples // batch_size)
+
+    correct = encoded_preds == labels
+
+    acc = np.sum(correct) / num_samples
+
+    return {'accuracy': acc}
 
 
 @click.command()
