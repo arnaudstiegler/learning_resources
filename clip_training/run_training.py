@@ -38,6 +38,7 @@ class ClipDataset(Dataset):
         return self.data_df.shape[0]
 
     def __getitem__(self, idx):
+        idx = idx % 2
         image = read_image(
             os.path.join(self.img_dir, f'{self.data_df.loc[idx, "image_index"]}.jpg'))
         text = self.data_df.loc[idx, 'TEXT']
@@ -86,11 +87,11 @@ class ClipModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, pixel_values, return_loss=True):
         outputs = self.image_encoder(pixel_values)
-        image_embedding = outputs.last_hidden_state[:, 0]
+        image_embedding = outputs.last_hidden_state[:, -1]
         image_embedding = nn.functional.normalize(self.image_proj(image_embedding), p=2, dim=-1)
 
         outputs = self.text_encoder(input_ids, attention_mask=attention_mask)
-        text_embedding = outputs.last_hidden_state[:, 0]
+        text_embedding = outputs.last_hidden_state[:, -1]
         text_embedding = nn.functional.normalize(self.text_proj(text_embedding), p=2, dim=-1)
 
         logits = torch.matmul(text_embedding, image_embedding.T) * torch.exp(self.temperature)
@@ -98,8 +99,8 @@ class ClipModel(nn.Module):
         return logits
 
 
-def get_label(outputs, n_device):
-    return torch.stack([torch.arange(outputs.shape[-1]) for _ in range(n_device)])
+def get_label(outputs):
+    return torch.arange(outputs.shape[-1])
 
 
 class CustomTrainer(Trainer):
@@ -110,14 +111,13 @@ class CustomTrainer(Trainer):
         n_device = torch.cuda.device_count() if outputs.device.type == 'cuda' else 1
         device = outputs.device
 
-        labels = get_label(outputs, n_device).to(device)
-        batched_outputs = outputs.view(n_device, outputs.shape[-1], outputs.shape[-1])
+        labels = get_label(outputs).to(device)
 
-        loss_t = nn.functional.cross_entropy(batched_outputs, labels)
-        loss_i = nn.functional.cross_entropy(batched_outputs.permute(0, 2, 1), labels)
+        loss_t = nn.functional.cross_entropy(outputs, labels)
+        loss_i = nn.functional.cross_entropy(outputs.T, labels)
         loss = (loss_i + loss_t) / 2
 
-        return (loss, {'pred': outputs}) if return_outputs else loss
+        return (loss_i, {'pred': outputs}) if return_outputs else loss
 
 
 def compute_metrics(
@@ -157,13 +157,14 @@ def run_training(filepath: str, images_path: str) -> None:
         logging_strategy='steps',
         max_steps=1000,
         logging_steps=100,
-        eval_steps=1,
+        eval_steps=100,
         evaluation_strategy=IntervalStrategy.STEPS,
         per_device_eval_batch_size=3,
         dataloader_drop_last=True,
         include_inputs_for_metrics=True,
+        learning_rate=5e-5,
+        optim='adafactor'
         # TODO: add warmup steps
-        # TODO: use Adafactor
         # gradient_checkpointing=True  # TODO: Add it back to the ClipModel before enabling it here
     )
 
