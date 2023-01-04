@@ -18,27 +18,18 @@ from transformers.training_args import TrainingArguments
 from clip_training.datagen import get_filtered_df_for_training
 
 
-@dataclass
-class ClipSample:
-    input_ids: torch.tensor
-    attention_mask: torch.tensor
-    pixel_values: torch.tensor
-
-
 class ClipDataset(Dataset):
     def __init__(self, df, images_path: str, transform=None):
         self.data_df = df
         self.img_dir = images_path
         self.transform = transform
         self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-        self.feature_extractor = ViTFeatureExtractor.from_pretrained(
-            "google/vit-base-patch16-224-in21k")
+        self.feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 
     def __len__(self):
         return self.data_df.shape[0]
 
     def __getitem__(self, idx):
-        idx = idx % 2
         image = read_image(
             os.path.join(self.img_dir, f'{self.data_df.loc[idx, "image_index"]}.jpg'))
         text = self.data_df.loc[idx, 'TEXT']
@@ -82,8 +73,10 @@ class ClipModel(nn.Module):
 
         self.text_proj = nn.Linear(768, 768)
         self.image_proj = nn.Linear(768, 768)
+        self.text_normalize = nn.LayerNorm(768)
+        self.image_normalize = nn.LayerNorm(768)
 
-        self.temperature = torch.nn.Parameter(torch.tensor([0.07]))  # Provided by the paper
+        self.temperature = torch.nn.Parameter(torch.tensor([0.07]))  # Value provided by the paper
 
     def forward(self, input_ids, attention_mask, pixel_values, return_loss=True):
         outputs = self.image_encoder(pixel_values)
@@ -95,29 +88,30 @@ class ClipModel(nn.Module):
         text_embedding = nn.functional.normalize(self.text_proj(text_embedding), p=2, dim=-1)
 
         logits = torch.matmul(text_embedding, image_embedding.T) * torch.exp(self.temperature)
-
         return logits
 
 
 def get_label(outputs):
-    return torch.arange(outputs.shape[-1])
+    if outputs.shape[0] % outputs.shape[-1] != 0:
+        raise ValueError
+    return torch.arange(outputs.shape[-1]).repeat(outputs.shape[0] // outputs.shape[-1])
 
 
 class CustomTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
         outputs = model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
                         pixel_values=inputs['pixel_values'])
-        # If using data parallel, the effective batch size is different
-        n_device = torch.cuda.device_count() if outputs.device.type == 'cuda' else 1
         device = outputs.device
 
         labels = get_label(outputs).to(device)
 
-        loss_t = nn.functional.cross_entropy(outputs, labels)
-        loss_i = nn.functional.cross_entropy(outputs.T, labels)
+        loss_t = nn.functional.cross_entropy(outputs, labels, reduction='sum')
+        loss_i = nn.functional.cross_entropy(outputs.T, labels, reduction='sum')
         loss = (loss_i + loss_t) / 2
 
-        return (loss_i, {'pred': outputs}) if return_outputs else loss
+        import ipdb; ipdb.set_trace()
+
+        return (loss, {'pred': outputs}) if return_outputs else loss
 
 
 def compute_metrics(
@@ -156,13 +150,13 @@ def run_training(filepath: str, images_path: str) -> None:
         fp16=False,
         logging_strategy='steps',
         max_steps=1000,
-        logging_steps=100,
-        eval_steps=100,
+        logging_steps=10,
+        eval_steps=1000,
         evaluation_strategy=IntervalStrategy.STEPS,
         per_device_eval_batch_size=3,
         dataloader_drop_last=True,
         include_inputs_for_metrics=True,
-        learning_rate=5e-5,
+        learning_rate=1e-3,
         optim='adafactor'
         # TODO: add warmup steps
         # gradient_checkpointing=True  # TODO: Add it back to the ClipModel before enabling it here

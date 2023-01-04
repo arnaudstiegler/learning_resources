@@ -8,3 +8,5 @@ Steps:
 - Download data locally using provided link to DATA_PATH
 - Run `python clip_training/datagen.py --filepath {DATA_PATH} --dest {IMAGE_PATH}`
 - Run training using `python clip_training/run_training.py --filepath {DATA_PATH} --images_path {IMAGE_PATH}`
+
+NB: by default, the `transformers` Trainer will use all availables GPUs. To limit the GPUs used by the trainer, use `CUDA_VISIBLE_DEVICES={value}` when running the script
