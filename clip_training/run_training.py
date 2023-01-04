@@ -1,5 +1,4 @@
 import os
-from dataclasses import dataclass
 from typing import Dict
 
 import click
@@ -73,18 +72,18 @@ class ClipModel(nn.Module):
 
         self.text_proj = nn.Linear(768, 768)
         self.image_proj = nn.Linear(768, 768)
-        self.text_normalize = nn.LayerNorm(768)
-        self.image_normalize = nn.LayerNorm(768)
 
         self.temperature = torch.nn.Parameter(torch.tensor([0.07]))  # Value provided by the paper
 
     def forward(self, input_ids, attention_mask, pixel_values, return_loss=True):
         outputs = self.image_encoder(pixel_values)
-        image_embedding = outputs.last_hidden_state[:, -1]
+        # Take the CLS token as image representation
+        image_embedding = outputs.last_hidden_state[:, 0]
         image_embedding = nn.functional.normalize(self.image_proj(image_embedding), p=2, dim=-1)
 
         outputs = self.text_encoder(input_ids, attention_mask=attention_mask)
-        text_embedding = outputs.last_hidden_state[:, -1]
+        # Given that we pad right, the EOS token is used for the sequence representation
+        text_embedding = outputs.last_hidden_state[:, 0]
         text_embedding = nn.functional.normalize(self.text_proj(text_embedding), p=2, dim=-1)
 
         logits = torch.matmul(text_embedding, image_embedding.T) * torch.exp(self.temperature)
@@ -108,8 +107,6 @@ class CustomTrainer(Trainer):
         loss_t = nn.functional.cross_entropy(outputs, labels, reduction='sum')
         loss_i = nn.functional.cross_entropy(outputs.T, labels, reduction='sum')
         loss = (loss_i + loss_t) / 2
-
-        import ipdb; ipdb.set_trace()
 
         return (loss, {'pred': outputs}) if return_outputs else loss
 
@@ -137,7 +134,7 @@ def compute_metrics(
 @click.option('--images_path')
 def run_training(filepath: str, images_path: str) -> None:
     df = get_filtered_df_for_training(filepath, images_path)
-    train, test = train_test_split(df, test_size=0.05, random_state=0)
+    train, test = train_test_split(df, test_size=0.2, random_state=0)
 
     train_dataset = ClipDataset(train.reset_index(drop=True), images_path)
     test_dataset = ClipDataset(test.reset_index(drop=True), images_path)
@@ -146,19 +143,20 @@ def run_training(filepath: str, images_path: str) -> None:
 
     training_args = TrainingArguments(
         output_dir='tmp_trainer',
-        per_device_train_batch_size=2,
-        fp16=False,
+        per_device_train_batch_size=6,
+        fp16=torch.cuda.is_available(),
         logging_strategy='steps',
-        max_steps=1000,
-        logging_steps=10,
+        max_steps=5000,
+        logging_steps=100,
         eval_steps=1000,
         evaluation_strategy=IntervalStrategy.STEPS,
-        per_device_eval_batch_size=3,
+        per_device_eval_batch_size=12,
         dataloader_drop_last=True,
         include_inputs_for_metrics=True,
-        learning_rate=1e-3,
-        optim='adafactor'
-        # TODO: add warmup steps
+        learning_rate=1e-5,
+        optim='adafactor',
+        lr_scheduler_type='constant',  # TODO: cosine
+        warmup_steps=100,
         # gradient_checkpointing=True  # TODO: Add it back to the ClipModel before enabling it here
     )
 
