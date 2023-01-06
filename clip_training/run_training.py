@@ -75,18 +75,23 @@ class ClipModel(nn.Module):
 
         self.temperature = torch.nn.Parameter(torch.tensor([0.07]))  # Value provided by the paper
 
-    def forward(self, input_ids, attention_mask, pixel_values, return_loss=True):
-        outputs = self.image_encoder(pixel_values)
+    def cos_similarity(self, image_embedding, text_embedding):
         # Take the CLS token as image representation
-        image_embedding = outputs.last_hidden_state[:, 0]
+        image_embedding = image_embedding.last_hidden_state[:, 0]
         image_embedding = nn.functional.normalize(self.image_proj(image_embedding), p=2, dim=-1)
 
-        outputs = self.text_encoder(input_ids, attention_mask=attention_mask)
         # Given that we pad right, the EOS token is used for the sequence representation
-        text_embedding = outputs.last_hidden_state[:, 0]
+        text_embedding = text_embedding.last_hidden_state[:, 0]
         text_embedding = nn.functional.normalize(self.text_proj(text_embedding), p=2, dim=-1)
 
         logits = torch.matmul(text_embedding, image_embedding.T) * torch.exp(self.temperature)
+        return logits
+
+    def forward(self, input_ids, attention_mask, pixel_values, return_loss=True):
+        image_output = self.image_encoder(pixel_values)
+        text_output = self.text_encoder(input_ids, attention_mask=attention_mask)
+        logits = self.cos_similarity(image_output, text_output)
+
         return logits
 
 
