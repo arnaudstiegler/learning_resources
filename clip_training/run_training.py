@@ -18,19 +18,9 @@ from clip_training.datagen import get_filtered_df_for_training
 
 
 class ClipDataset(Dataset):
-    def __init__(self, df, images_path: str, transform=None):
-        self.data_df = df
-        self.img_dir = images_path
-        self.transform = transform
-        self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-        self.feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
-
-    def __len__(self):
-        return self.data_df.shape[0]
-
     def __getitem__(self, idx):
         image = read_image(
-            os.path.join(self.img_dir, f'{self.data_df.loc[idx, "image_index"]}.jpg'))
+            os.path.join(self.img_dir, f'{int(self.data_df.loc[idx, "SAMPLE_ID"])}.jpg'))
         text = self.data_df.loc[idx, 'TEXT']
         if self.transform:
             image = self.transform(image)
@@ -44,6 +34,16 @@ class ClipDataset(Dataset):
             # Allows compute_metrics to work on the trainer side without static labels
             'return_loss': True
         }
+
+    def __init__(self, df, images_path: str, transform=None):
+        self.data_df = df
+        self.img_dir = images_path
+        self.transform = transform
+        self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+        self.feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+
+    def __len__(self):
+        return self.data_df.shape[0]
 
 
 def collate(inputs) -> Dict:
@@ -104,8 +104,8 @@ class CustomTrainer(Trainer):
 
         labels = get_label(outputs).to(device)
 
-        loss_t = nn.functional.cross_entropy(outputs, labels, reduction='sum')
-        loss_i = nn.functional.cross_entropy(outputs.T, labels, reduction='sum')
+        loss_t = nn.functional.cross_entropy(outputs, labels)
+        loss_i = nn.functional.cross_entropy(outputs.T, labels)
         loss = (loss_i + loss_t) / 2
 
         return (loss, {'pred': outputs}) if return_outputs else loss
@@ -143,19 +143,19 @@ def run_training(filepath: str, images_path: str) -> None:
 
     training_args = TrainingArguments(
         output_dir='tmp_trainer',
-        per_device_train_batch_size=6,
+        per_device_train_batch_size=8,
         fp16=torch.cuda.is_available(),
         logging_strategy='steps',
         max_steps=5000,
         logging_steps=100,
-        eval_steps=1000,
+        eval_steps=100,
         evaluation_strategy=IntervalStrategy.STEPS,
-        per_device_eval_batch_size=12,
+        per_device_eval_batch_size=12,  # NB: in this scenario, the "accuracy" actually depends on the eval batch size
         dataloader_drop_last=True,
         include_inputs_for_metrics=True,
-        learning_rate=1e-5,
+        learning_rate=5e-5,
         optim='adafactor',
-        lr_scheduler_type='constant',  # TODO: cosine
+        lr_scheduler_type='cosine',  # TODO: cosine
         warmup_steps=100,
         # gradient_checkpointing=True  # TODO: Add it back to the ClipModel before enabling it here
     )

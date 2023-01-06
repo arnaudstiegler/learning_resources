@@ -7,6 +7,10 @@ import click
 import pandas as pd
 from torchvision.io import read_image
 from transformers import ViTFeatureExtractor
+from tqdm import tqdm
+from multiprocessing import Pool
+import tqdm
+from functools import partial
 
 
 def validate_image(feature_extractor: ViTFeatureExtractor, dest: str) -> None:
@@ -24,7 +28,6 @@ def validate_image(feature_extractor: ViTFeatureExtractor, dest: str) -> None:
 
 class TimeoutException(Exception): pass
 
-
 @contextmanager
 def time_limit(seconds):
     def signal_handler(signum, frame):
@@ -38,21 +41,26 @@ def time_limit(seconds):
         signal.alarm(0)
 
 
-def download_data_locally(df: pd.DataFrame, dest: str) -> None:
-    feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
-    for i, row in df.iterrows():
-        if not os.path.exists(os.path.join(dest, f"{i}.jpg")):
-            try:
-                with time_limit(10):
-                    urllib.request.urlretrieve(row['URL'], os.path.join(dest, f"{i}.jpg"))
-            except TimeoutException:
-                print("Timed out!")
-            except KeyboardInterrupt:
-                break
-            except Exception as e:
-                print(f'{row["URL"]} failed with exception={e}')
+def download_img(dest, row_tuple):
+    _, row = row_tuple
+    if not os.path.exists(os.path.join(dest, f"{int(row['SAMPLE_ID'])}.jpg")):
+        try:
+            with time_limit(1):
+                urllib.request.urlretrieve(row['URL'], os.path.join(dest, f"{int(row['SAMPLE_ID'])}.jpg"))
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
+        except Exception as e:
+            pass
+    return
 
-        validate_image(feature_extractor, dest)
+
+def download_data_locally(df: pd.DataFrame, dest: str) -> None:
+    with Pool(30) as p:
+        func = partial(download_img, dest)
+        r = list(tqdm.tqdm(p.imap(func, df.iterrows()), total=df.shape[0]))
+
+    feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+    validate_image(feature_extractor, dest)
 
 
 def read_parquet_data(local_path: str) -> pd.DataFrame:
@@ -69,7 +77,7 @@ def get_filtered_df_for_training(filepath: str, images_path: str) -> pd.DataFram
     # Filter with the image present in the images folder
     images = [int(elem.replace('.jpg', '')) for elem in os.listdir(images_path) if
               elem != '.ipynb_checkpoints']
-    df['has_image'] = df['image_index'].isin(images)
+    df['has_image'] = df['SAMPLE_ID'].isin(images)
 
     # Final filter
     df = df.loc[df.has_image]
