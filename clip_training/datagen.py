@@ -9,13 +9,12 @@ from torchvision.io import read_image
 from transformers import ViTFeatureExtractor
 from tqdm import tqdm
 from multiprocessing import Pool
-import tqdm
 from functools import partial
 
 
 def validate_image(feature_extractor: ViTFeatureExtractor, dest: str) -> None:
     # sanity check on downloaded images
-    for file in os.listdir(dest):
+    for file in tqdm(os.listdir(dest)):
         if file.endswith('.jpg'):
             try:
                 image = read_image(os.path.join(dest, file))
