@@ -1,5 +1,5 @@
 import click
-from clip_training.datagen import validate_image
+from clip_training.utils import validate_image
 from transformers import ViTFeatureExtractor
 
 

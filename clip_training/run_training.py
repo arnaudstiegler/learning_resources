@@ -148,12 +148,12 @@ def run_training(filepath: str, images_path: str) -> None:
 
     training_args = TrainingArguments(
         output_dir='tmp_trainer',
-        per_device_train_batch_size=8,
+        per_device_train_batch_size=12,
         fp16=torch.cuda.is_available(),
         logging_strategy='steps',
-        max_steps=5000,
+        max_steps=int(1e5),
         logging_steps=100,
-        eval_steps=100,
+        eval_steps=1000,
         evaluation_strategy=IntervalStrategy.STEPS,
         per_device_eval_batch_size=12,  # NB: in this scenario, the "accuracy" actually depends on the eval batch size
         dataloader_drop_last=True,
