@@ -25,7 +25,7 @@ class ClipDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        tokenized_text = self.tokenizer(text, return_tensors='pt')
+        tokenized_text = self.tokenizer(text, return_tensors='pt', truncation=True)
 
         return {
             'pixel_values': self.feature_extractor(image, return_tensors='pt')['pixel_values'],
@@ -139,7 +139,8 @@ def compute_metrics(
 @click.option('--images_path')
 def run_training(filepath: str, images_path: str) -> None:
     df = get_filtered_df_for_training(filepath, images_path)
-    train, test = train_test_split(df, test_size=0.2, random_state=0)
+    # Given the overall size of the dataset, test_size is kept low (size is still well over 10k examples)
+    train, test = train_test_split(df, test_size=0.01, random_state=0)
 
     train_dataset = ClipDataset(train.reset_index(drop=True), images_path)
     test_dataset = ClipDataset(test.reset_index(drop=True), images_path)
@@ -155,7 +156,7 @@ def run_training(filepath: str, images_path: str) -> None:
         logging_steps=100,
         eval_steps=1000,
         evaluation_strategy=IntervalStrategy.STEPS,
-        per_device_eval_batch_size=12,  # NB: in this scenario, the "accuracy" actually depends on the eval batch size
+        per_device_eval_batch_size=24,  # NB: in this scenario, the "accuracy" actually depends on the eval batch size
         dataloader_drop_last=True,
         include_inputs_for_metrics=True,
         learning_rate=5e-5,
@@ -169,9 +170,9 @@ def run_training(filepath: str, images_path: str) -> None:
                             data_collator=collate,
                             args=training_args, compute_metrics=compute_metrics)
 
+    # Initial evaluation before training
+    trainer.evaluate()
     trainer.train()
-
-    # trainer.evaluate(eval_dataset=test_dataset)
 
 
 if __name__ == '__main__':
