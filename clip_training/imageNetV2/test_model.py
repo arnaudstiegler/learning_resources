@@ -8,6 +8,10 @@ import torch
 from torch.utils.data import DataLoader
 from collections import defaultdict
 
+'''
+This script is very messy and could be optimized to have a faster evaluation loop
+'''
+
 test_dataset = datasets.ImageFolder(root='/home/arnaud/imagenetv2-matched-frequency-format-val')
 tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
