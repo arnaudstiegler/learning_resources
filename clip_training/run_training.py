@@ -75,22 +75,23 @@ class ClipModel(nn.Module):
 
         self.temperature = torch.nn.Parameter(torch.tensor([0.07]))  # Value provided by the paper
 
-    def cos_similarity(self, image_embedding, text_embedding):
-        # Take the CLS token as image representation
-        image_embedding = image_embedding.last_hidden_state[:, 0]
+    def cos_similarity(self, image_embedding, text_embedding, full_matrix=True):
         image_embedding = nn.functional.normalize(self.image_proj(image_embedding), p=2, dim=-1)
-
-        # Given that we pad right, the EOS token is used for the sequence representation
-        text_embedding = text_embedding.last_hidden_state[:, 0]
         text_embedding = nn.functional.normalize(self.text_proj(text_embedding), p=2, dim=-1)
 
-        logits = torch.matmul(text_embedding, image_embedding.T) * torch.exp(self.temperature)
+        if full_matrix:
+            # Compute the cos_similarity across all images and all labels
+            logits = torch.matmul(text_embedding, image_embedding.T) * torch.exp(self.temperature)
+        else:
+            # Compute the cos similarity for column-wise, similar to taking the diagonal of the full matrix product
+            logits = (text_embedding * image_embedding).sum(dim=1)
         return logits
 
     def forward(self, input_ids, attention_mask, pixel_values, return_loss=True):
         image_output = self.image_encoder(pixel_values)
         text_output = self.text_encoder(input_ids, attention_mask=attention_mask)
-        logits = self.cos_similarity(image_output, text_output)
+        # Take the CLS token as image representation
+        logits = self.cos_similarity(image_output.last_hidden_state[:, 0], text_output.last_hidden_state[:, 0])
 
         return logits
 
@@ -155,14 +156,15 @@ def run_training(filepath: str, images_path: str) -> None:
         max_steps=int(1e5),
         logging_steps=100,
         eval_steps=1000,
+        save_steps=10000,
         evaluation_strategy=IntervalStrategy.STEPS,
         per_device_eval_batch_size=24,  # NB: in this scenario, the "accuracy" actually depends on the eval batch size
         dataloader_drop_last=True,
         include_inputs_for_metrics=True,
-        learning_rate=5e-5,
+        learning_rate=1e-5,
         optim='adafactor',
         lr_scheduler_type='cosine',  # TODO: cosine
-        warmup_steps=100,
+        warmup_steps=500,
         # gradient_checkpointing=True  # TODO: Add it back to the ClipModel before enabling it here
     )
 
