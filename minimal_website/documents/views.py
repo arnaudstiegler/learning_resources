@@ -10,6 +10,9 @@ from enum import Enum
 from typing import Any
 
 
+SYSTEM_INITIAL_MESSAGE = {'role': 'system', 'content': 'You are a helpful assistant. Be succinct for all your answers.'}
+
+
 class Roles(Enum):
     SYSTEM = "system"
     USER = "user"
@@ -18,17 +21,17 @@ class Roles(Enum):
 
 @dataclass
 class Message:
-    user: bool
-    content: str
+    is_user: bool
+    message: str
 
     def to_dict(self):
-        return {'role': Roles.USER.value if self.user else Roles.ASSISTANT.value, 'content': self.content}
+        return {'role': Roles.USER.value if self.is_user else Roles.ASSISTANT.value, 'content': self.message}
 
 
 def format_messages(data: Any):
-    messages = []
+    messages = [SYSTEM_INITIAL_MESSAGE]
     for message in data:
-        messages.append(Message(message['user'], message['content']).to_dict())
+        messages.append(Message(message['is_user'], message['message']).to_dict())
     return messages
 
 
@@ -36,14 +39,12 @@ def format_messages(data: Any):
 def chat_api_request(request):
     openai.api_key = os.getenv("OPENAI_API_KEY")
     messages = request.data['messages']
-
+    messages = format_messages(messages)
     completion = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
-        messages=[
-            messages
-        ]
+        messages=messages
     )
-    return Response({'answer': completion.choices[0].message["content"]})
+    return Response({'message': completion.choices[0].message["content"].strip()})
 
 
 @api_view(['GET', 'POST'])
@@ -53,7 +54,6 @@ def documents_list(request):
         serializer = DocumentSerializer(documents, many=True)
         return Response(serializer.data)
     elif request.method == 'POST':
-        print(request.data)
         serializer = DocumentSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()

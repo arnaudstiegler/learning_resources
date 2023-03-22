@@ -2,7 +2,7 @@ import React, { Component } from "react";
 import { Col, Container, Row } from "reactstrap";
 import DocumentList from "./DocumentList";
 import NewDocumentModal from "./NewDocumentModal";
-import ChatWindow from "./ChatWindow";
+import ChatWindow from "./ChatWindow.tsx";
 
 import axios from "axios";
 
