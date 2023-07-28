@@ -1,10 +1,7 @@
-torch
-torchvision
-pandas
-click
+django
+django-cors-headers
+Pillow
+openai
 transformers
-pyarrow
-fastparquet
 ipdb
-tensorboard
-scikit-learn
+opencv-python
