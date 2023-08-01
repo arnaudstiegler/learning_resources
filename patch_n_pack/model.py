@@ -46,18 +46,24 @@ class PatchPackPatchEmbeddings(nn.Module):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
-        batch_size, x_size, y_size = pixel_values.shape
+        # TODO: check height and width
+        batch_size, _, x_size, y_size = pixel_values.shape
 
         # To project to the right hidden embedding dim
         hidden_dim = 768
 
+        import math
+        # TODO: we should get patches differently than this, this is not correct
+        num_x_patches = math.floor(x_size/self.patch_size[0]) + 1
+        num_y_patches = math.floor(y_size/self.patch_size[1]) + 1
+
         # x_embeddings
-        patches_x_embeddings = torch.arange(x_size).view(batch_size, 1, -1) / x_size
+        patches_x_embeddings = torch.arange(x_size/self.patch_size[0]).view(batch_size, 1, -1) / math.floor(x_size/self.patch_size[0])
         patches_x_embeddings = self.projection(patches_x_embeddings.T).view(
-            batch_size, x_size, hidden_dim
+            batch_size, num_x_patches, hidden_dim
         )
         patches_x_embeddings = patches_x_embeddings.expand(
-            y_size, batch_size, x_size, hidden_dim
+            num_y_patches, batch_size, num_x_patches, hidden_dim
         )
         patches_x_embeddings = patches_x_embeddings.reshape(batch_size, -1, hidden_dim)
 
@@ -107,17 +113,18 @@ class PatchPackEmbeddings(nn.Module):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
-        import ipdb
 
-        ipdb.set_trace()
         patches = torch.nn.functional.unfold(
             pixel_values,
             (self.patch_size[0], self.patch_size[1]),
             stride=(self.patch_size[0], self.patch_size[1]),
         )
-        positional_embeddings = self.patch_embeddings(patches)
+        # Need to pad to resolution
+        padded_patches = torch.nn.functional.pad(patches, (0, 1024-patches.shape[-1]))
+        assert padded_patches.shape[-1] == 1024
+        positional_embeddings = self.patch_embeddings(pixel_values)
 
-        return patches + positional_embeddings
+        return padded_patches + positional_embeddings
 
 
 class PatchPackModel(ViTModel):
