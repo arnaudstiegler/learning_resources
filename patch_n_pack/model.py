@@ -8,7 +8,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from transformers import ViTModel
 from transformers.modeling_outputs import ImageClassifierOutput
-from transformers.models.vit.modeling_vit import ViTPreTrainedModel
+from transformers.models.vit.modeling_vit import ViTPreTrainedModel, ViTEncoder
 
 
 class PatchPackPatchEmbeddings(nn.Module):
@@ -53,12 +53,12 @@ class PatchPackPatchEmbeddings(nn.Module):
         hidden_dim = 768
 
         import math
-        # TODO: we should get patches differently than this, this is not correct
-        num_x_patches = math.floor(x_size/self.patch_size[0]) + 1
-        num_y_patches = math.floor(y_size/self.patch_size[1]) + 1
+        # this only works because we do not pad the image
+        num_x_patches = math.floor(x_size/self.patch_size[0])
+        num_y_patches = math.floor(y_size/self.patch_size[1])
 
         # x_embeddings
-        patches_x_embeddings = torch.arange(x_size/self.patch_size[0]).view(batch_size, 1, -1) / math.floor(x_size/self.patch_size[0])
+        patches_x_embeddings = torch.arange(num_x_patches).view(batch_size, 1, -1) / num_x_patches
         patches_x_embeddings = self.projection(patches_x_embeddings.T).view(
             batch_size, num_x_patches, hidden_dim
         )
@@ -68,15 +68,14 @@ class PatchPackPatchEmbeddings(nn.Module):
         patches_x_embeddings = patches_x_embeddings.reshape(batch_size, -1, hidden_dim)
 
         # y_embeddings
-        patches_y_embeddings = torch.arange(y_size).view(batch_size, 1, -1) / y_size
+        patches_y_embeddings = torch.arange(num_y_patches).view(batch_size, 1, -1) / num_y_patches
         patches_y_embeddings = self.y_projection(patches_y_embeddings.T).view(
-            batch_size, y_size, hidden_dim
+            batch_size, num_y_patches, hidden_dim
         )
         patches_y_embeddings = patches_y_embeddings.expand(
-            x_size, batch_size, y_size, hidden_dim
+            num_x_patches, batch_size, num_y_patches, hidden_dim
         )
         patches_y_embeddings = patches_y_embeddings.reshape(batch_size, -1, hidden_dim)
-
         patches_positional_embeddings = patches_x_embeddings + patches_y_embeddings
 
         return patches_positional_embeddings
@@ -114,17 +113,21 @@ class PatchPackEmbeddings(nn.Module):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
 
+        # [batch_size, patch_size*patch_size*num_channels, num_patches]
         patches = torch.nn.functional.unfold(
             pixel_values,
             (self.patch_size[0], self.patch_size[1]),
             stride=(self.patch_size[0], self.patch_size[1]),
         )
-        # Need to pad to resolution
-        padded_patches = torch.nn.functional.pad(patches, (0, 1024-patches.shape[-1]))
-        assert padded_patches.shape[-1] == 1024
-        positional_embeddings = self.patch_embeddings(pixel_values)
 
-        return padded_patches + positional_embeddings
+        positional_embeddings = self.patch_embeddings(pixel_values)
+        patches = patches + positional_embeddings.transpose(1, 2)
+
+        # Need to pad to resolution
+        padded_patches = torch.nn.functional.pad(patches, (0, 1024 - patches.shape[-1])).transpose(1, 2)
+        assert padded_patches.shape[-1] == self.hidden_dim, padded_patches.shape[-1]
+        assert padded_patches.shape[-2] == 1024, padded_patches.shape[-2]
+        return padded_patches
 
 
 class PatchPackModel(ViTModel):
@@ -133,7 +136,7 @@ class PatchPackModel(ViTModel):
         # Here, we need to change the patching proc
         # For now, we can just change the way the patches are generated while keeping their number the same
         self.embeddings = PatchPackEmbeddings(config)
-        self.encoder = ViTModel(config)
+        self.encoder = ViTEncoder(config)
 
 
 class PatchPackModelImageClassification(ViTPreTrainedModel):
