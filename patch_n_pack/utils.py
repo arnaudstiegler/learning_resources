@@ -2,6 +2,10 @@ import numpy as np
 import math
 import cv2
 import torch
+from transformers import ViTConfig
+
+from patch_n_pack.extractor import PatchPackProcessor
+from patch_n_pack.model import PatchPackModelImageClassification
 
 
 def resize_with_aspect_ratio(
@@ -34,3 +38,10 @@ def resize_with_aspect_ratio(
         .unsqueeze(0)
     )
     return img
+
+
+def set_up_model():
+    config = ViTConfig()
+    model = PatchPackModelImageClassification(config)
+    processor = PatchPackProcessor()
+    return processor, model

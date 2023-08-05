@@ -1,29 +1,37 @@
-from patch_n_pack.extractor import PatchPackProcessor
-from patch_n_pack.model import PatchPackModelImageClassification
 from PIL import Image
-from transformers import ViTConfig
-from patch_n_pack.utils import resize_with_aspect_ratio
+from patch_n_pack.utils import resize_with_aspect_ratio, set_up_model
+import torch
+from torch.optim import Adam
+import random
 
-def set_up_model():
-    config = ViTConfig()
-    model = PatchPackModelImageClassification(config)
-    processor = PatchPackProcessor()
-    return processor, model
+MAX_EPOCHS = 10
 
 
-def run_inference(extractor, model, image):
-    # TODO: need to redefine the extractor so that it tries to match the aspect ratio of the image
-    # and packs images
-    inputs = extractor(images=image, return_tensors="pt")
+def single_batch_overfit():
+    image = Image.open("patch_n_pack/images/10003.jpeg")
+    processor, model = set_up_model()
 
-    x = resize_with_aspect_ratio(inputs.pixel_values, 512)
+    inputs = processor(images=image, return_tensors="pt")
 
-    outputs = model(pixel_values=x)
-    logits = outputs.logits
-    return logits
+    optimizer = Adam(model.parameters(), lr=1e-5)
+
+    for i in range(MAX_EPOCHS):
+        optimizer.zero_grad()
+
+        resolution = random.choice([128, 256, 512, 1024])
+
+        print(f'Resolution: {resolution}')
+
+        x = resize_with_aspect_ratio(inputs.pixel_values, resolution)
+        outputs = model(pixel_values=x, labels=torch.tensor([0]))
+        loss = outputs.loss
+
+        print(loss.item())
+
+        loss.backward()
+        optimizer.step()
+    return
 
 
 if __name__ == "__main__":
-    image = Image.open("patch_n_pack/images/10003.jpeg")
-    processor, model = set_up_model()
-    run_inference(processor, model, image)
+    single_batch_overfit()
