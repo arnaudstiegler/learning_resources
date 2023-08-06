@@ -7,3 +7,4 @@ ipdb
 opencv-python
 torchmetrics
 datasets
+wandb
