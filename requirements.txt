@@ -5,3 +5,5 @@ openai
 transformers
 ipdb
 opencv-python
+torchmetrics
+datasets

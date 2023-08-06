@@ -47,6 +47,7 @@ class PatchPackPatchEmbeddings(nn.Module):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         # TODO: check height and width
+        device = pixel_values.device
         batch_size, _, x_size, y_size = pixel_values.shape
 
         # To project to the right hidden embedding dim
@@ -58,7 +59,7 @@ class PatchPackPatchEmbeddings(nn.Module):
         num_y_patches = math.floor(y_size/self.patch_size[1])
 
         # x_embeddings
-        patches_x_embeddings = torch.arange(num_x_patches).view(batch_size, 1, -1) / num_x_patches
+        patches_x_embeddings = torch.arange(num_x_patches, device=device).view(batch_size, 1, -1) / num_x_patches
         patches_x_embeddings = self.projection(patches_x_embeddings.T).view(
             batch_size, num_x_patches, hidden_dim
         )
@@ -68,7 +69,7 @@ class PatchPackPatchEmbeddings(nn.Module):
         patches_x_embeddings = patches_x_embeddings.reshape(batch_size, -1, hidden_dim)
 
         # y_embeddings
-        patches_y_embeddings = torch.arange(num_y_patches).view(batch_size, 1, -1) / num_y_patches
+        patches_y_embeddings = torch.arange(num_y_patches, device=device).view(batch_size, 1, -1) / num_y_patches
         patches_y_embeddings = self.y_projection(patches_y_embeddings.T).view(
             batch_size, num_y_patches, hidden_dim
         )
