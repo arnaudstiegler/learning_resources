@@ -56,8 +56,8 @@ def train(wandb_logging: bool):
     collate_fn = partial(collate, processor)
 
     # Need to create a dataloader here
-    train_dataloader = DataLoader(train_dataset, batch_size=BASELINE_CONFIG['train_batch_size'], collate_fn=collate_fn, num_workers=24)
-    val_dataloader = DataLoader(val_dataset, batch_size=BASELINE_CONFIG['val_batch_size'], collate_fn=collate_fn, num_workers=24)
+    train_dataloader = DataLoader(train_dataset, batch_size=BASELINE_CONFIG['train_batch_size'], collate_fn=collate_fn, num_workers=16)
+    val_dataloader = DataLoader(val_dataset, batch_size=BASELINE_CONFIG['val_batch_size'], collate_fn=collate_fn, num_workers=16)
 
     model.to(device)
     optimizer = Adam(model.parameters(), lr=1e-5)
