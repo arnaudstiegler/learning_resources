@@ -8,15 +8,26 @@ from functools import partial
 import torchmetrics
 from tqdm import tqdm
 import wandb
+from torch.cuda.amp import autocast
 
 
 BASELINE_CONFIG = {
-    'max_epochs': 5,
+    'max_epochs': 8,
     'learning_rate': 1e-5,
-    'train_batch_size': 64,  # For image size 224*224
-    'val_batch_size': 64,  # For image size 224*224
+    'image_size': 1024,
     'train_steps': 100,  # Log train loss every train steps
     'val_steps': 2500  # Eval every val_steps steps
+}
+
+BATCH_SIZE_FOR_IMAGE_SIZE = {
+    224: {
+        'train_batch_size': 64,
+        'val_batch_size': 64,
+    },
+    1024: {
+        'train_batch_size': 2,
+        'val_batch_size': 4,
+    }
 }
 
 
@@ -49,15 +60,18 @@ def train(wandb_logging: bool):
     val_loss_metric = torchmetrics.aggregation.MeanMetric()
 
     # Initializing the model from scratch
-    config = ViTConfig(num_labels=num_classes)
-    processor = ViTImageProcessor(config)
+    config = ViTConfig(num_labels=num_classes, image_size=BASELINE_CONFIG['image_size'])
+    processor = ViTImageProcessor(config, size={"height": config.image_size, "width": config.image_size})
     model = ViTForImageClassification(config)
+    model.gradient_checkpointing_enable()
 
     collate_fn = partial(collate, processor)
 
     # Need to create a dataloader here
-    train_dataloader = DataLoader(train_dataset, batch_size=BASELINE_CONFIG['train_batch_size'], collate_fn=collate_fn, num_workers=16)
-    val_dataloader = DataLoader(val_dataset, batch_size=BASELINE_CONFIG['val_batch_size'], collate_fn=collate_fn, num_workers=16)
+    train_batch_size = BATCH_SIZE_FOR_IMAGE_SIZE[BASELINE_CONFIG['image_size']]['train_batch_size']
+    train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, collate_fn=collate_fn, num_workers=16)
+    val_batch_size = BATCH_SIZE_FOR_IMAGE_SIZE[BASELINE_CONFIG['image_size']]['val_batch_size']
+    val_dataloader = DataLoader(val_dataset, batch_size=val_batch_size, collate_fn=collate_fn, num_workers=16)
 
     model.to(device)
     optimizer = Adam(model.parameters(), lr=1e-5)
@@ -66,37 +80,39 @@ def train(wandb_logging: bool):
         for i, batch in enumerate(tqdm(train_dataloader)):
             model.train()
             images, labels = batch
-            optimizer.zero_grad()
 
-            outputs = model(pixel_values=images.pixel_values.to(device), labels=labels.to(device))
-            loss = outputs.loss
-            train_loss_metric(loss.to('cpu'))
-            loss.backward()
-            optimizer.step()
+            with autocast(dtype=torch.float16):
+                optimizer.zero_grad()
 
-            if i > 0 and i % BASELINE_CONFIG['train_steps'] == 0:
-                print({'train_loss': train_loss_metric.compute()})
+                outputs = model(pixel_values=images.pixel_values.to(device), labels=labels.to(device))
+                loss = outputs.loss
+                train_loss_metric(loss.to('cpu'))
+                loss.backward()
+                optimizer.step()
 
-                if wandb_logging:
-                    wandb.log({'train_loss': train_loss_metric.compute().item()})
-
-            if i > 0 and i % BASELINE_CONFIG['val_steps'] == 0:
-                with torch.no_grad():
-                    model.eval()
-                    acc_metric.reset()
-                    val_loss_metric.reset()
-
-                    for val_batch in tqdm(val_dataloader, position=1):
-                        images, labels = val_batch
-
-                        out = model(pixel_values=images.pixel_values.to(device), labels=labels.to(device))
-                        acc_metric(out.logits.to('cpu'), labels)
-                        val_loss_metric(out.loss.to('cpu'))
-
-                    print({'val_loss': val_loss_metric.compute(), 'accuracy': acc_metric.compute()})
+                if i > 0 and i % BASELINE_CONFIG['train_steps'] == 0:
+                    print({'train_loss': train_loss_metric.compute()})
 
                     if wandb_logging:
-                        wandb.log({'val_loss': val_loss_metric.compute().item(), 'accuracy': acc_metric.compute().item()})
+                        wandb.log({'train_loss': train_loss_metric.compute().item()})
+
+                if i>0 and i % BASELINE_CONFIG['val_steps'] == 0:
+                    with torch.no_grad():
+                        model.eval()
+                        acc_metric.reset()
+                        val_loss_metric.reset()
+
+                        for val_batch in tqdm(val_dataloader, position=1):
+                            images, labels = val_batch
+
+                            out = model(pixel_values=images.pixel_values.to(device), labels=labels.to(device))
+                            acc_metric(out.logits.to('cpu'), labels)
+                            val_loss_metric(out.loss.to('cpu'))
+
+                        print({'val_loss': val_loss_metric.compute(), 'accuracy': acc_metric.compute()})
+
+                        if wandb_logging:
+                            wandb.log({'val_loss': val_loss_metric.compute().item(), 'accuracy': acc_metric.compute().item()})
 
 
 if __name__ == "__main__":
