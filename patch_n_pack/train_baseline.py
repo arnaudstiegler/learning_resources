@@ -1,5 +1,6 @@
 import click
 import torch
+from typing import Optional
 from torch.optim import Adam
 from datasets import load_dataset
 from torch.utils.data import DataLoader
@@ -14,15 +15,19 @@ from torch.cuda.amp import autocast
 BASELINE_CONFIG = {
     'max_epochs': 8,
     'learning_rate': 1e-5,
-    'image_size': 1024,
+    'image_size': 512,
     'train_steps': 100,  # Log train loss every train steps
-    'val_steps': 2500  # Eval every val_steps steps
+    'val_steps': 2000  # Eval every val_steps steps
 }
 
 BATCH_SIZE_FOR_IMAGE_SIZE = {
     224: {
         'train_batch_size': 64,
         'val_batch_size': 64,
+    },
+    512: {
+        'train_batch_size': 28,
+        'val_batch_size': 56,
     },
     1024: {
         'train_batch_size': 2,
@@ -39,8 +44,11 @@ def collate(processor, samples):
 
 
 @click.command()
+@click.option('--image_size', default=BASELINE_CONFIG['image_size'], help='Number of greetings.')
+@click.option('--train_batch_size', type=int)
+@click.option('--val_batch_size', type=int)
 @click.option('--wandb_logging', is_flag=True)
-def train(wandb_logging: bool):
+def train(image_size: int, wandb_logging: bool, train_batch_size: Optional[int], val_batch_size: Optional[int]):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     if wandb_logging:
@@ -49,7 +57,13 @@ def train(wandb_logging: bool):
             # Set the project where this run will be logged
             project='patch_n_pack',
             # Track hyperparameters and run metadata
-            config=BASELINE_CONFIG)
+            config={
+                'base_config': BASELINE_CONFIG,
+                'image_size': image_size,
+                'train_batch_size': train_batch_size,
+                'val_batch_size': val_batch_size,
+            }
+        )
 
     train_dataset = load_dataset("aharley/rvl_cdip", split='train')
     val_dataset = load_dataset("aharley/rvl_cdip", split='validation')
@@ -60,7 +74,7 @@ def train(wandb_logging: bool):
     val_loss_metric = torchmetrics.aggregation.MeanMetric()
 
     # Initializing the model from scratch
-    config = ViTConfig(num_labels=num_classes, image_size=BASELINE_CONFIG['image_size'])
+    config = ViTConfig(num_labels=num_classes, image_size=image_size)
     processor = ViTImageProcessor(config, size={"height": config.image_size, "width": config.image_size})
     model = ViTForImageClassification(config)
     model.gradient_checkpointing_enable()
@@ -68,10 +82,10 @@ def train(wandb_logging: bool):
     collate_fn = partial(collate, processor)
 
     # Need to create a dataloader here
-    train_batch_size = BATCH_SIZE_FOR_IMAGE_SIZE[BASELINE_CONFIG['image_size']]['train_batch_size']
-    train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, collate_fn=collate_fn, num_workers=16)
-    val_batch_size = BATCH_SIZE_FOR_IMAGE_SIZE[BASELINE_CONFIG['image_size']]['val_batch_size']
-    val_dataloader = DataLoader(val_dataset, batch_size=val_batch_size, collate_fn=collate_fn, num_workers=16)
+    train_bs = train_batch_size if train_batch_size else BATCH_SIZE_FOR_IMAGE_SIZE[image_size]['train_batch_size']
+    train_dataloader = DataLoader(train_dataset, batch_size=train_bs, collate_fn=collate_fn, num_workers=16)
+    val_bs = val_batch_size if val_batch_size else BATCH_SIZE_FOR_IMAGE_SIZE[image_size]['val_batch_size']
+    val_dataloader = DataLoader(val_dataset, batch_size=val_bs, collate_fn=collate_fn, num_workers=16)
 
     model.to(device)
     optimizer = Adam(model.parameters(), lr=1e-5)
@@ -96,7 +110,7 @@ def train(wandb_logging: bool):
                     if wandb_logging:
                         wandb.log({'train_loss': train_loss_metric.compute().item()})
 
-                if i>0 and i % BASELINE_CONFIG['val_steps'] == 0:
+                if i > 0 and i % BASELINE_CONFIG['val_steps'] == 0:
                     with torch.no_grad():
                         model.eval()
                         acc_metric.reset()
