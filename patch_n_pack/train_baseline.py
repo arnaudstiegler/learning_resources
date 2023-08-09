@@ -67,6 +67,7 @@ def train(image_size: int, wandb_logging: bool, train_batch_size: Optional[int],
             }
         )
 
+    print('Initializing the dataset')
     if local_train_data and local_val_data:
         train_dataset = load_from_disk(local_train_data)
         val_dataset = load_from_disk(local_val_data)
@@ -81,6 +82,7 @@ def train(image_size: int, wandb_logging: bool, train_batch_size: Optional[int],
     val_loss_metric = torchmetrics.aggregation.MeanMetric()
 
     # Initializing the model from scratch
+    print('Initializing the model')
     config = ViTConfig(num_labels=num_classes, image_size=image_size)
     processor = ViTImageProcessor(config, size={"height": config.image_size, "width": config.image_size})
     model = ViTForImageClassification(config)
@@ -97,6 +99,7 @@ def train(image_size: int, wandb_logging: bool, train_batch_size: Optional[int],
     model.to(device)
     optimizer = Adam(model.parameters(), lr=1e-5)
 
+    print('Starting training')
     for epoch in range(BASELINE_CONFIG['max_epochs']):
         for i, batch in enumerate(tqdm(train_dataloader)):
             model.train()
