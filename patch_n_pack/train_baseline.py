@@ -1,5 +1,6 @@
 import click
 import torch
+import os
 from typing import Optional
 from torch.optim import Adam
 from datasets import load_dataset, load_from_disk
@@ -92,9 +93,9 @@ def train(image_size: int, wandb_logging: bool, train_batch_size: Optional[int],
 
     # Need to create a dataloader here
     train_bs = train_batch_size if train_batch_size else BATCH_SIZE_FOR_IMAGE_SIZE[image_size]['train_batch_size']
-    train_dataloader = DataLoader(train_dataset, batch_size=train_bs, collate_fn=collate_fn, num_workers=16)
+    train_dataloader = DataLoader(train_dataset, batch_size=train_bs, collate_fn=collate_fn, num_workers=os.cpu_count())
     val_bs = val_batch_size if val_batch_size else BATCH_SIZE_FOR_IMAGE_SIZE[image_size]['val_batch_size']
-    val_dataloader = DataLoader(val_dataset, batch_size=val_bs, collate_fn=collate_fn, num_workers=16)
+    val_dataloader = DataLoader(val_dataset, batch_size=val_bs, collate_fn=collate_fn, num_workers=os.cpu_count())
 
     model.to(device)
     optimizer = Adam(model.parameters(), lr=1e-5)
