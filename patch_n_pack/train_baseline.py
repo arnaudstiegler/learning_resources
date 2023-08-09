@@ -2,7 +2,7 @@ import click
 import torch
 from typing import Optional
 from torch.optim import Adam
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from torch.utils.data import DataLoader
 from transformers import ViTImageProcessor, ViTForImageClassification, ViTConfig
 from functools import partial
@@ -47,8 +47,10 @@ def collate(processor, samples):
 @click.option('--image_size', default=BASELINE_CONFIG['image_size'], help='Number of greetings.')
 @click.option('--train_batch_size', type=int)
 @click.option('--val_batch_size', type=int)
+@click.option('--local_train_data', type=str)
+@click.option('--local_val_data', type=str)
 @click.option('--wandb_logging', is_flag=True)
-def train(image_size: int, wandb_logging: bool, train_batch_size: Optional[int], val_batch_size: Optional[int]):
+def train(image_size: int, wandb_logging: bool, train_batch_size: Optional[int], val_batch_size: Optional[int], local_train_data: Optional[str], local_val_data: Optional[str]):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     if wandb_logging:
@@ -65,8 +67,13 @@ def train(image_size: int, wandb_logging: bool, train_batch_size: Optional[int],
             }
         )
 
-    train_dataset = load_dataset("aharley/rvl_cdip", split='train')
-    val_dataset = load_dataset("aharley/rvl_cdip", split='validation')
+    if local_train_data and local_val_data:
+        train_dataset = load_from_disk(local_train_data)
+        val_dataset = load_from_disk(local_val_data)
+    else:
+        train_dataset = load_dataset("aharley/rvl_cdip", split='train')
+        val_dataset = load_dataset("aharley/rvl_cdip", split='validation')
+
     num_classes = len(set(train_dataset['label']))
 
     acc_metric = torchmetrics.classification.Accuracy(task="multiclass", num_classes=num_classes)
