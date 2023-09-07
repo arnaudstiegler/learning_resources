@@ -8,3 +8,9 @@ fastparquet
 ipdb
 tensorboard
 scikit-learn
+soundfile
+speechbrain
+simpleaudio
+fairseq
+g2p_en
+playsound

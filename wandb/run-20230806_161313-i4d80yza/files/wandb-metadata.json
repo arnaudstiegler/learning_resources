@@ -1,0 +1,210 @@
+{
+    "os": "Linux-5.19.0-41-generic-x86_64-with-glibc2.35",
+    "python": "3.10.6",
+    "heartbeatAt": "2023-08-06T20:13:13.886019",
+    "startedAt": "2023-08-06T20:13:13.273254",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--wandb_logging"
+    ],
+    "state": "running",
+    "program": "-m patch_n_pack.train_baseline",
+    "git": {
+        "remote": "https://github.com/arnaudstiegler/learning_resources.git",
+        "commit": "8b89311105f39fffd67b0a0edc4caa6f3696b0a2"
+    },
+    "email": "arnaud.stiegler@gmail.com",
+    "root": "/home/arnaud/learning_resources",
+    "host": "arnaud-System-Product-Name",
+    "username": "arnaud",
+    "executable": "/home/arnaud/learning_resources/venv/bin/python",
+    "cpu_count": 16,
+    "cpu_count_logical": 32,
+    "cpu_freq": {
+        "current": 2540.6504375,
+        "min": 1200.0,
+        "max": 4412.5
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 1200.141,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 1200.139,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 1700.0,
+            "min": 1200.0,
+            "max": 4500.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 1200.166,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 1200.218,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 1200.255,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4500.0
+        },
+        {
+            "current": 1200.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 1200.039,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 1200.003,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4500.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 1200.662,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4500.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        },
+        {
+            "current": 3100.0,
+            "min": 1200.0,
+            "max": 4400.0
+        }
+    ],
+    "disk": {
+        "total": 182.2811393737793,
+        "used": 151.78252410888672
+    },
+    "gpu": "NVIDIA GeForce RTX 2080 Ti",
+    "gpu_count": 2,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 2080 Ti",
+            "memory_total": 11811160064
+        },
+        {
+            "name": "NVIDIA GeForce RTX 2080 Ti",
+            "memory_total": 11811160064
+        }
+    ],
+    "memory": {
+        "total": 31.0240478515625
+    }
+}
